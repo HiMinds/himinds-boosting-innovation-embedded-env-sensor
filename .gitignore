@@ -50,3 +50,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+#ESP32
+build
+fs/ca.crt
+fs/client.crt
+fs/client.key
+
