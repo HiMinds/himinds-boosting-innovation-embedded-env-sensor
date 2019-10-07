@@ -93,7 +93,7 @@ function getBQ27441Info() {
   }
 
   let tempKelvin = swap16(I2C.readRegW(bus, BQ27441_I2C_ADDRESS, BQ27441_COMMAND_TEMP));
-  let tempCelsius = (tempKelvin - 273.15) / 100;
+  let tempCelsius = ((tempKelvin * 0.1) - 273.15);
 
   if (tempCelsius >= 0) {
     print("Celsius: ", tempCelsius);
