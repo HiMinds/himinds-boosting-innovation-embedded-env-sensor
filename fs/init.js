@@ -7,6 +7,11 @@ load('api_i2c.js');
 
 let bmeOnline = false;
 
+//
+let ENV_BUTTON = 13;
+let ENV_LED_GREEN = 15;
+let ENV_LED_RED = 16;
+
 // Default sensors address for BME280
 let BME280_I2C_ADDRESS = 0x76;
 let BQ27441_I2C_ADDRESS = 0x55;
@@ -35,6 +40,10 @@ let BQ27441_COMMAND_SOC_UNFL = 0x30; // StateOfChargeUnfiltered mAh
 // Initialize Adafruit_BME280 library using the I2C interface
 let bme = Adafruit_BME280.createI2C(BME280_I2C_ADDRESS);
 let deviceId = Cfg.get('device.id');
+
+GPIO.set_mode(ENV_LED_GREEN, GPIO.MODE_OUTPUT);
+GPIO.set_mode(ENV_LED_RED, GPIO.MODE_OUTPUT);
+
 
 if (bme === undefined) {
   print('Cant find a sensor');
@@ -149,3 +158,21 @@ function timerCallback() {
 }
 
 Timer.set(10000, Timer.REPEAT, timerCallback, null);
+
+// Toogle LED
+GPIO.set_button_handler(ENV_BUTTON, GPIO.PULL_UP, GPIO.INT_EDGE_NEG, 20, function () {
+  let i = 0;
+  let stateRed = 0;
+  let stateGreen = 0;
+
+  print("Toggled LED, state is: ", stateRed ? 'on' : 'off');
+  print("Toggled LED, state is: ", stateGreen ? 'on' : 'off');
+
+  for (i = 0; i < 3; i++) {
+    stateRed = GPIO.toggle(ENV_LED_RED);
+    Sys.usleep(1000000);
+    stateGreen = GPIO.toggle(ENV_LED_GREEN);
+    Sys.usleep(1000000);
+  }
+
+}, null);
