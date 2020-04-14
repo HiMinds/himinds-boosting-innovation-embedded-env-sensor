@@ -1,10 +1,44 @@
+/*
+ * Copyright (c) HiMinds.com
+ *
+ * Author:  Suru Dissanaike <suru.dissanaike@himinds.com>
+ *
+* MIT License
+*
+* Copyright (c) 2020
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files (the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions:
+*
+* The above copyright notice and this permission notice shall be included in all
+* copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
+*/
+
 load('api_timer.js');
+load('api_mqtt.js');
 load('api_arduino_bme280.js');
 load('api_gpio.js');
 load('api_sys.js');
 load('api_config.js');
 load('api_i2c.js');
+load('api_esp32.js');
 
+
+let topicEnvMeasurement = "/v1/env/measurement/";
+let topicEnvSystem = "/v1/env/system/";
+let topicEnvBattery = "/v1/env/battery/";
 let bmeOnline = false;
 
 //
@@ -39,7 +73,6 @@ let BQ27441_COMMAND_SOC_UNFL = 0x30; // StateOfChargeUnfiltered mAh
 
 // Initialize Adafruit_BME280 library using the I2C interface
 let bme = Adafruit_BME280.createI2C(BME280_I2C_ADDRESS);
-let deviceId = Cfg.get('device.id');
 
 GPIO.set_mode(ENV_LED_GREEN, GPIO.MODE_OUTPUT);
 GPIO.set_mode(ENV_LED_RED, GPIO.MODE_OUTPUT);
@@ -51,15 +84,24 @@ if (bme === undefined) {
   bmeOnline = true;
 }
 
+//Set the temperature difference between your room and ESP32
+let tempOffset = 15;
+
+// convert Fahrenheit to Celsius
+function getTemperature() {
+    return ((5 / 9) * (ESP32.temp() - 32) - tempOffset);
+}
+
 let getSystemInfo = function () {
   return JSON.stringify({
+    device_id: Cfg.get('device.id'),
     data: {
-      deviceId: deviceId,
-      totalRAM: Sys.total_ram(),
-      freeRAM: Sys.free_ram(),
+      total_ram: Sys.total_ram(),
+      free_ram: Sys.free_ram(),
       uptime: Sys.uptime(),
       model: "env ib-1",
-      firmware: "1.0.1a"
+      firmware: "1.0.1a",
+      core_temperature:getTemperature()
     }
   });
 };
@@ -74,6 +116,7 @@ let getBME280Info = function () {
     let pressure = bme.readPressure();
 
     message = JSON.stringify({
+      device_id: Cfg.get('device.id'),
       data: {
         temperature: temperature,
         humidity: humidity,
@@ -86,6 +129,8 @@ let getBME280Info = function () {
 
 //bq27441
 function getBQ27441Info() {
+
+  let message = "bq27441 off-line";
 
   function swap16(val) {
     return ((val & 0xFF) << 8) |
@@ -102,7 +147,7 @@ function getBQ27441Info() {
   }
 
   let tempKelvin = swap16(I2C.readRegW(bus, BQ27441_I2C_ADDRESS, BQ27441_COMMAND_TEMP));
-  let tempCelsius = ((tempKelvin * 0.1) - 273.15);
+  let tempCelsius = (tempKelvin - 273.15) / 100;
 
   if (tempCelsius >= 0) {
     print("Celsius: ", tempCelsius);
@@ -130,13 +175,16 @@ function getBQ27441Info() {
   // expressed as a percentage of FullChargeCapacity() with a range of 0 to 100%.
   let stateOfCharge = swap16(I2C.readRegW(bus, BQ27441_I2C_ADDRESS, BQ27441_COMMAND_SOC));
 
+
+
   message = JSON.stringify({
+    device_id: Cfg.get('device.id'),
     data: {
       voltage: voltage,
       temperature: tempCelsius,
-      batteryLevel: stateOfCharge,
-      fullAvailableCapacity: fullAvailableCapacity,
-      remainingCapacity: remainingCapacity
+      battery_level: stateOfCharge,
+      full_available_capacity: fullAvailableCapacity,
+      remaining_capacity: remainingCapacity
     }
   });
 
@@ -145,34 +193,28 @@ function getBQ27441Info() {
 
 function timerCallback() {
   let message;
+  let pubResult;
 
   message = getSystemInfo();
-  print('getSystemInfo message: ', message);
+  pubResult = MQTT.pub(topicEnvSystem, message, 0);
+  print('Published:', pubResult ? 'yes' : 'no', 'topic:', topicEnvSystem, 'message:', message);
 
   message = getBME280Info();
-  print('getBME280Info message: ', message);
+  pubResult = MQTT.pub(topicEnvMeasurement, message, 0);
+  print('Published:', pubResult ? 'yes' : 'no', 'topic:', topicEnvMeasurement, 'message:', message);
 
   message = getBQ27441Info();
-  print('getBQ27441Info message: ', message);
+  pubResult = MQTT.pub(topicEnvBattery, message, 0);
+  print('Published:', pubResult ? 'yes' : 'no', 'topic:', topicEnvBattery, 'message:', message);
 
 }
 
-Timer.set(10000, Timer.REPEAT, timerCallback, null);
+MQTT.setEventHandler(function (conn, ev, edata) {
+  // Wait for MQTT.EV_CONNACK to ensure the mqtt connection is established
+  if (MQTT.EV_CONNACK === ev) {
+    print('=== MQTT event handler: got MQTT.EV_CONNACK');
 
-// Toogle LED
-GPIO.set_button_handler(ENV_BUTTON, GPIO.PULL_UP, GPIO.INT_EDGE_NEG, 20, function () {
-  let i = 0;
-  let stateRed = 0;
-  let stateGreen = 0;
-
-  print("Toggled LED, state is: ", stateRed ? 'on' : 'off');
-  print("Toggled LED, state is: ", stateGreen ? 'on' : 'off');
-
-  for (i = 0; i < 3; i++) {
-    stateRed = GPIO.toggle(ENV_LED_RED);
-    Sys.usleep(1000000);
-    stateGreen = GPIO.toggle(ENV_LED_GREEN);
-    Sys.usleep(1000000);
+    Timer.set(10000, Timer.REPEAT, timerCallback, null);
   }
 
 }, null);

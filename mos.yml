@@ -1,34 +1,63 @@
 author: HiMinds
 description: HiMinds Env Sensor
-version: 1.0
+version: 2.0
+arch: esp32
+manifest_version: 2017-05-18
 
 libs_version: ${mos.version}
 modules_version: ${mos.version}
 mongoose_os_version: ${mos.version}
 
-filesystem:
-  - fs
-libs:
-    # common mgos libs
-  - origin: https://github.com/mongoose-os-libs/boards
-  - origin: https://github.com/mongoose-os-libs/i2c
-  - origin: https://github.com/mongoose-os-libs/rpc-service-config
-  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
-  - origin: https://github.com/mongoose-os-libs/rpc-uart
-  - origin: https://github.com/mongoose-os-libs/spi
-
-    # libs necessary for the current app
-  - origin: https://github.com/mongoose-os-libs/arduino-adafruit-bme280
-  - origin: https://github.com/mongoose-os-libs/mjs
-  - origin: https://github.com/mongoose-os-libs/rpc-service-i2c
 
 config_schema:
   - ["i2c.enable", true]
   - ["i2c.scl_gpio", 26]
   - ["i2c.sda_gpio", 27]
+  - ["wifi.ap.enable", true]
+  - ["cportal.enable", true ]
+  - ["cportal.any", false]
+  - ["wifi.ap.ssid", "s", "HiMinds_ENV", {title: "SSID"}]
+  - ["wifi.ap.pass", "s", "himinds1234", {title: "Password", type: "password"}]
+  # We include these with dummy values and set to false to prevent AP disconnect when scan due to device
+  # only being in AP mode, to switch to AP+STA mode.  With some config set, it starts in AP+STA mode
+  - ["wifi.sta.enable", false ]
+  - ["wifi.sta.ssid", "Dummy_SSID" ]
+  - ["wifi.sta.pass", "Dummy_PASS" ]
+  - ["mqtt.server", " 127.0.0.1:8883"]
+  - ["mqtt.enable", true]
+  - ["mqtt.ssl_ca_cert", "ca.crt"]
+  - ["mqtt.ssl_cert", "client.crt"]
+  - ["mqtt.ssl_key", "client.key"]
+  - ["mqtt.max_queue_length", "i", 0, {title: "Maximum queue length for buffering QoS 1+ messages. 0 to disable queue."}]
 
 tags:
   - js
   - hw
+
+filesystem:
+  - fs
+
+build_vars:
+  # Required to start device in AP+STA mode (to prevent disconnect on scan call)
+  MGOS_WIFI_ENABLE_AP_STA: 1
+
+libs:
+    # common mgos libs
+  - origin: https://github.com/mongoose-os-libs/boards
+#  - origin: https://github.com/mongoose-os-libs/ca-bundle
+  - origin: https://github.com/mongoose-os-libs/i2c
+  - origin: https://github.com/mongoose-os-libs/rpc-common
+  - origin: https://github.com/mongoose-os-libs/rpc-service-config
+  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
+  - origin: https://github.com/mongoose-os-libs/rpc-uart
+  - origin: https://github.com/mongoose-os-libs/spi
+  
+    # libs necessary for the current app
+  - origin: https://github.com/mongoose-os-libs/arduino-adafruit-bme280
+  - origin: https://github.com/mongoose-os-libs/mjs
+  - origin: https://github.com/mongoose-os-libs/mqtt
+  - origin: https://github.com/mongoose-os-libs/rpc-service-i2c
+  - origin: https://github.com/mongoose-os-libs/rpc-loopback
+  - origin: https://github.com/tripflex/captive-portal-wifi-stack
 
 manifest_version: 2017-05-18
